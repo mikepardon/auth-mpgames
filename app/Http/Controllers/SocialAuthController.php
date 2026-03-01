@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -87,6 +88,14 @@ class SocialAuthController extends Controller
 
         Auth::login($user, true);
         session()->regenerate();
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'social_login',
+            'metadata' => ['provider' => $provider],
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
 
         // Redirect back to the OAuth authorize flow if one was pending
         $redirectAfter = session()->pull('sso_redirect_after');

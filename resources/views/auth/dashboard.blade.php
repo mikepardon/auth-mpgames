@@ -2,7 +2,7 @@
 @section('title', 'Dashboard - MPGames')
 
 @section('content')
-<div x-data="{ showChangePassword: false }">
+<div x-data="{ showChangePassword: false, showDeleteAccount: false }">
     <h2 class="text-xl font-semibold text-center mb-4">Welcome, {{ auth()->user()->username }}</h2>
 
     <div class="space-y-3 text-sm">
@@ -52,6 +52,31 @@
             </form>
         </div>
 
+        <button @click="showDeleteAccount = !showDeleteAccount"
+            class="w-full py-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900 rounded text-sm transition">
+            Delete Account
+        </button>
+
+        <div x-show="showDeleteAccount" x-data="deleteAccountForm()" class="bg-red-950/50 border border-red-900 rounded p-4">
+            <p class="text-xs text-red-300 mb-3">This action is permanent. All your data will be deleted and connected game accounts will be notified.</p>
+
+            <template x-if="delError">
+                <div class="bg-red-900/50 border border-red-700 text-red-300 px-3 py-1 rounded mb-3 text-xs" x-text="delError"></div>
+            </template>
+
+            <form @submit.prevent="submitDelete">
+                @if(auth()->user()->password)
+                <input type="password" x-model="delForm.password" placeholder="Enter your password to confirm" required
+                    class="w-full px-3 py-2 mb-3 bg-slate-900 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-red-500">
+                @endif
+                <button type="submit" :disabled="delLoading"
+                    class="w-full py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded text-sm font-medium transition">
+                    <span x-show="!delLoading">Permanently Delete My Account</span>
+                    <span x-show="delLoading">Deleting...</span>
+                </button>
+            </form>
+        </div>
+
         <form method="POST" action="/logout">
             @csrf
             <button type="submit" class="w-full py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-800 rounded text-sm transition">
@@ -62,6 +87,35 @@
 </div>
 
 <script>
+function deleteAccountForm() {
+    return {
+        delForm: { password: '' },
+        delError: null,
+        delLoading: false,
+        async submitDelete() {
+            this.delLoading = true;
+            this.delError = null;
+            try {
+                const res = await fetch('/delete-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content, 'Accept': 'application/json' },
+                    body: JSON.stringify(this.delForm)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    this.delError = data.message || Object.values(data.errors || {}).flat()[0] || 'Failed.';
+                } else {
+                    window.location.href = data.redirect || '/login';
+                }
+            } catch (e) {
+                this.delError = 'Network error.';
+            } finally {
+                this.delLoading = false;
+            }
+        }
+    };
+}
+
 function changePasswordForm() {
     return {
         cpForm: { current_password: '', new_password: '', new_password_confirmation: '' },

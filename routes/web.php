@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\SocialAuthController;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,17 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
+    Route::post('/delete-account', [AuthController::class, 'deleteAccount']);
+});
+
+// Admin dashboard
+Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/', [AdminController::class, 'dashboard']);
+    Route::get('/users', [AdminController::class, 'users']);
+    Route::get('/users/{id}', [AdminController::class, 'userDetail']);
+    Route::post('/users/{id}/toggle-admin', [AdminController::class, 'toggleAdmin']);
+    Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+    Route::get('/oauth-clients', [AdminController::class, 'oauthClients']);
 });
 
 // Social auth (SSO)

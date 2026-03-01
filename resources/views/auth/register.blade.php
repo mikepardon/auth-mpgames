@@ -66,7 +66,7 @@
 <script>
 function registerForm() {
     return {
-        form: { username: '', email: '', password: '', password_confirmation: '' },
+        form: { username: '', email: '', password: '', password_confirmation: '', intended: '{{ $intended ?? '' }}' },
         error: null,
         loading: false,
         async submit() {

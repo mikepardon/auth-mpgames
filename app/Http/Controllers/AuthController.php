@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\EmailVerificationCode;
 use App\Models\User;
+use App\Services\WebhookService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,9 +22,11 @@ class AuthController extends Controller
         return view('auth.login');
     }
 
-    public function showRegister()
+    public function showRegister(Request $request)
     {
-        return view('auth.register');
+        $intended = $request->query('intended', session('url.intended'));
+
+        return view('auth.register', ['intended' => $intended]);
     }
 
     public function showVerify(Request $request)
@@ -48,6 +53,7 @@ class AuthController extends Controller
             'username' => ['required', 'string', 'min:4', 'max:20', 'regex:/^[a-zA-Z0-9]+$/', 'unique:users,username'],
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:4|confirmed',
+            'intended' => 'nullable|string',
         ], [
             'username.min' => 'Username must be at least 4 characters.',
             'username.max' => 'Username must be 20 characters or fewer.',
@@ -60,7 +66,19 @@ class AuthController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        // Preserve intended URL through the verification flow
+        if (!empty($validated['intended'])) {
+            session(['url.intended' => $validated['intended']]);
+        }
+
         $this->sendVerificationCode($user);
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'register',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'requires_verification' => true,
@@ -94,6 +112,13 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         $intended = session()->pull('url.intended', '/dashboard');
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'email_verified',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json([
             'message' => 'Email verified successfully.',
@@ -160,6 +185,13 @@ class AuthController extends Controller
 
         $intended = session()->pull('url.intended', '/dashboard');
 
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'login',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
         return response()->json([
             'user' => $user->only(['id', 'username', 'email', 'email_verified_at', 'avatar_url', 'created_at']),
             'redirect' => $intended,
@@ -189,6 +221,13 @@ class AuthController extends Controller
         }
 
         $user->update(['password' => Hash::make($validated['new_password'])]);
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'password_change',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return response()->json(['message' => 'Password updated.']);
     }
@@ -254,7 +293,56 @@ class AuthController extends Controller
 
         DB::table('password_reset_tokens')->where('email', $user->email)->delete();
 
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'password_reset',
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
         return response()->json(['message' => 'Password has been reset.']);
+    }
+
+    public function deleteAccount(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // Require password confirmation for users with a password
+        if ($user->password) {
+            $request->validate(['password' => 'required|string']);
+
+            if (!Hash::check($request->password, $user->password)) {
+                return response()->json(['message' => 'Password is incorrect.'], 422);
+            }
+        }
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'account_deleted',
+            'metadata' => ['username' => $user->username, 'email' => $user->email],
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        // Revoke all Passport tokens
+        $user->tokens()->each(function ($token) {
+            $token->revoke();
+        });
+
+        // Notify connected game clients via webhooks
+        app(WebhookService::class)->notifyClients('user.deleted', [
+            'user_id' => $user->id,
+            'username' => $user->username,
+            'email' => $user->email,
+        ]);
+
+        $user->delete();
+
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return response()->json(['message' => 'Account deleted.', 'redirect' => '/login']);
     }
 
     private function sendVerificationCode(User $user): void

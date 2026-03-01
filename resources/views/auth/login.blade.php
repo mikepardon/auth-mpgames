@@ -85,7 +85,7 @@ function loginForm() {
 @endsection
 
 @section('footer')
-    Don't have an account? <a href="/register" class="text-blue-400 hover:underline">Sign up</a>
+    Don't have an account? <a href="/register{{ session('url.intended') ? '?intended=' . urlencode(session('url.intended')) : '' }}" class="text-blue-400 hover:underline">Sign up</a>
     <span class="mx-2">|</span>
     <a href="/forgot-password" class="text-blue-400 hover:underline">Forgot password?</a>
 @endsection
