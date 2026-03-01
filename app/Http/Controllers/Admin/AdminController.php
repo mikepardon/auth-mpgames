@@ -51,8 +51,8 @@ class AdminController extends Controller
         $auditLogs = AuditLog::where('user_id', $id)->orderByDesc('created_at')->limit(50)->get();
 
         $oauthTokens = DB::table('oauth_access_tokens')
-            ->where('user_id', $id)
-            ->where('revoked', false)
+            ->where('oauth_access_tokens.user_id', $id)
+            ->where('oauth_access_tokens.revoked', false)
             ->join('oauth_clients', 'oauth_access_tokens.client_id', '=', 'oauth_clients.id')
             ->select('oauth_clients.name as client_name', 'oauth_access_tokens.created_at', 'oauth_access_tokens.expires_at')
             ->orderByDesc('oauth_access_tokens.created_at')
