@@ -11,10 +11,7 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(
-            \Laravel\Passport\Contracts\AuthorizationViewResponse::class,
-            fn () => new \Laravel\Passport\Http\Responses\SimpleViewResponse('vendor.passport.authorize')
-        );
+        //
     }
 
     public function boot(): void
