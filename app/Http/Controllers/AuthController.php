@@ -19,6 +19,16 @@ class AuthController extends Controller
 {
     public function showLogin(Request $request)
     {
+        // If the OAuth authorize flow included a provider hint (e.g. ?provider=google),
+        // skip the login form and redirect directly to that social auth flow.
+        $intended = session('url.intended', '');
+        $parsed = parse_url($intended);
+        parse_str($parsed['query'] ?? '', $query);
+
+        if (!empty($query['provider']) && in_array($query['provider'], ['google', 'apple'])) {
+            return redirect('/auth/' . $query['provider'] . '/redirect');
+        }
+
         return view('auth.login');
     }
 
