@@ -11,6 +11,7 @@
         "laravel/passport": "^13.5",
         "laravel/socialite": "^5.24",
         "laravel/tinker": "^2.10.1",
+        "sentry/sentry-laravel": "^4.21",
         "socialiteproviders/apple": "^5.9"
     },
     "require-dev": {
