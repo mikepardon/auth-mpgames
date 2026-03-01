@@ -18,9 +18,4 @@ $app = Application::configure(basePath: dirname(__DIR__))
         Sentry\Laravel\Integration::handles($exceptions);
     })->create();
 
-$app->singleton(
-    \Laravel\Passport\Contracts\AuthorizationViewResponse::class,
-    fn () => new \Laravel\Passport\Http\Responses\SimpleViewResponse('vendor.passport.authorize')
-);
-
 return $app;
