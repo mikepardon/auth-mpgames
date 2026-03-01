@@ -7,6 +7,8 @@ use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Laravel\Passport\ClientRepository;
 
 class AdminController extends Controller
 {
@@ -99,5 +101,108 @@ class AdminController extends Controller
             ->get();
 
         return view('admin.oauth-clients', compact('clients'));
+    }
+
+    public function createOauthClient(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'redirect_uri' => 'required|url|max:2048',
+            'is_public' => 'boolean',
+            'webhook_url' => 'nullable|url|max:2048',
+        ]);
+
+        $clientRepo = app(ClientRepository::class);
+
+        $client = $clientRepo->createAuthorizationCodeGrantClient(
+            name: $validated['name'],
+            redirectUris: [$validated['redirect_uri']],
+            confidential: empty($validated['is_public']),
+        );
+
+        $webhookSecret = null;
+        if (!empty($validated['webhook_url'])) {
+            $webhookSecret = Str::random(64);
+            DB::table('oauth_clients')->where('id', $client->id)->update([
+                'webhook_url' => $validated['webhook_url'],
+                'webhook_secret' => $webhookSecret,
+            ]);
+        }
+
+        return redirect('/admin/oauth-clients')
+            ->with('success', "Client \"{$client->name}\" created.")
+            ->with('newClient', [
+                'id' => $client->id,
+                'secret' => $client->secret,
+                'webhook_secret' => $webhookSecret,
+            ]);
+    }
+
+    public function showOauthClient($id)
+    {
+        $client = DB::table('oauth_clients')->where('id', $id)->firstOrFail();
+
+        $tokenCount = DB::table('oauth_access_tokens')
+            ->where('client_id', $id)
+            ->where('revoked', false)
+            ->count();
+
+        return view('admin.oauth-client-detail', compact('client', 'tokenCount'));
+    }
+
+    public function updateOauthClient(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'redirect_uri' => 'required|url|max:2048',
+            'webhook_url' => 'nullable|url|max:2048',
+        ]);
+
+        DB::table('oauth_clients')->where('id', $id)->update([
+            'name' => $validated['name'],
+            'redirect_uris' => json_encode([$validated['redirect_uri']]),
+            'webhook_url' => $validated['webhook_url'] ?: null,
+        ]);
+
+        return back()->with('success', 'Client updated.');
+    }
+
+    public function regenerateOauthSecret($id)
+    {
+        $client = DB::table('oauth_clients')->where('id', $id)->firstOrFail();
+
+        $newSecret = Str::random(40);
+        DB::table('oauth_clients')->where('id', $id)->update([
+            'secret' => $newSecret,
+        ]);
+
+        return back()
+            ->with('success', 'Client secret regenerated.')
+            ->with('newSecret', $newSecret);
+    }
+
+    public function regenerateWebhookSecret($id)
+    {
+        $client = DB::table('oauth_clients')->where('id', $id)->firstOrFail();
+
+        $newSecret = Str::random(64);
+        DB::table('oauth_clients')->where('id', $id)->update([
+            'webhook_secret' => $newSecret,
+        ]);
+
+        return back()
+            ->with('success', 'Webhook secret regenerated.')
+            ->with('newWebhookSecret', $newSecret);
+    }
+
+    public function revokeOauthClient($id)
+    {
+        // Revoke all tokens for this client
+        DB::table('oauth_access_tokens')->where('client_id', $id)->update(['revoked' => true]);
+
+        // Revoke the client itself
+        DB::table('oauth_clients')->where('id', $id)->update(['revoked' => true]);
+
+        return redirect('/admin/oauth-clients')->with('success', 'Client revoked.');
     }
 }

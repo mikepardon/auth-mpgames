@@ -47,6 +47,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/users/{id}/toggle-admin', [AdminController::class, 'toggleAdmin']);
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
     Route::get('/oauth-clients', [AdminController::class, 'oauthClients']);
+    Route::post('/oauth-clients', [AdminController::class, 'createOauthClient']);
+    Route::get('/oauth-clients/{id}', [AdminController::class, 'showOauthClient']);
+    Route::put('/oauth-clients/{id}', [AdminController::class, 'updateOauthClient']);
+    Route::post('/oauth-clients/{id}/regenerate-secret', [AdminController::class, 'regenerateOauthSecret']);
+    Route::post('/oauth-clients/{id}/regenerate-webhook-secret', [AdminController::class, 'regenerateWebhookSecret']);
+    Route::delete('/oauth-clients/{id}', [AdminController::class, 'revokeOauthClient']);
 });
 
 // Social auth (SSO)
