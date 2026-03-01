@@ -19,13 +19,11 @@ class User extends Authenticatable
         'google_id',
         'apple_id',
         'avatar_url',
-        'onesignal_email_token',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
-        'onesignal_email_token',
     ];
 
     protected function casts(): array

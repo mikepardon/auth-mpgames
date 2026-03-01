@@ -42,9 +42,7 @@
                     @method('DELETE')
                     <input type="hidden" name="state" value="{{ $request->state }}">
                     <input type="hidden" name="client_id" value="{{ $client->getKey() }}">
-                    @if ($request->input('auth_token'))
-                        <input type="hidden" name="auth_token" value="{{ $request->input('auth_token') }}">
-                    @endif
+                    <input type="hidden" name="auth_token" value="{{ $authToken }}">
                     <button type="submit"
                         class="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded font-medium transition">
                         Deny
@@ -55,9 +53,7 @@
                     @csrf
                     <input type="hidden" name="state" value="{{ $request->state }}">
                     <input type="hidden" name="client_id" value="{{ $client->getKey() }}">
-                    @if ($request->input('auth_token'))
-                        <input type="hidden" name="auth_token" value="{{ $request->input('auth_token') }}">
-                    @endif
+                    <input type="hidden" name="auth_token" value="{{ $authToken }}">
                     <button type="submit"
                         class="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded font-semibold transition">
                         Authorize

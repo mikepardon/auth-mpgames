@@ -11,7 +11,10 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->singleton(
+            \Laravel\Passport\Contracts\AuthorizationViewResponse::class,
+            fn () => new \Laravel\Passport\Http\Responses\SimpleViewResponse('vendor.passport.authorize')
+        );
     }
 
     public function boot(): void
@@ -19,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
         Passport::tokensExpireIn(now()->addDays(15));
         Passport::refreshTokensExpireIn(now()->addDays(30));
         Passport::personalAccessTokensExpireIn(now()->addDays(15));
+
         $this->app['events']->listen(SocialiteWasCalled::class, AppleExtendSocialite::class);
     }
 }

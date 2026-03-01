@@ -60,7 +60,7 @@ function verifyForm() {
                 if (!res.ok) {
                     this.error = data.message || 'Verification failed.';
                 } else {
-                    window.location.href = '/dashboard';
+                    window.location.href = data.redirect || '/dashboard';
                 }
             } catch (e) {
                 this.error = 'Network error.';

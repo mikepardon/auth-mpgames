@@ -48,7 +48,7 @@ php artisan serve
 ### Google SSO Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create OAuth 2.0 credentials
+2. Create OAuth 2.0 credentialsA
 3. Set authorized redirect URI to `{APP_URL}/auth/google/callback`
 4. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to `.env`
 

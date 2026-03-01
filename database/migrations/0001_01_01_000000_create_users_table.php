@@ -17,7 +17,6 @@ return new class extends Migration
             $table->string('google_id')->nullable()->unique();
             $table->string('apple_id')->nullable()->unique();
             $table->string('avatar_url')->nullable();
-            $table->string('onesignal_email_token')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });
