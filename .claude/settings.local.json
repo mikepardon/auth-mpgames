@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(/c/Users/Michael/.config/herd/bin/php.bat:*)",
-      "Bash(/c/Users/Michael/.config/herd/bin/composer.bat:*)"
+      "Bash(/c/Users/Michael/.config/herd/bin/composer.bat:*)",
+      "Bash(export PATH=\"/c/Users/Michael/.config/herd/bin/php84:/c/Users/Michael/.config/herd/bin:$PATH\")",
+      "Bash(php /c/Users/Michael/.config/herd/bin/composer.phar:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }
