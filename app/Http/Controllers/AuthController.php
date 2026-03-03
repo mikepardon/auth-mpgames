@@ -118,7 +118,7 @@ class AuthController extends Controller
 
         EmailVerificationCode::where('user_id', $user->id)->delete();
 
-        Auth::login($user);
+        Auth::login($user, true);
         $request->session()->regenerate();
 
         $intended = session()->pull('url.intended', '/dashboard');
@@ -173,7 +173,7 @@ class AuthController extends Controller
         $loginField = str_contains($input, '@') ? 'email' : 'username';
         $loginValue = strtolower($input);
 
-        if (!Auth::attempt([$loginField => $loginValue, 'password' => $validated['password']])) {
+        if (!Auth::attempt([$loginField => $loginValue, 'password' => $validated['password']], true)) {
             return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
