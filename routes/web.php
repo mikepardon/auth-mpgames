@@ -43,8 +43,10 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard']);
     Route::get('/users', [AdminController::class, 'users']);
+    Route::post('/users', [AdminController::class, 'createUser']);
     Route::get('/users/{id}', [AdminController::class, 'userDetail']);
     Route::post('/users/{id}/toggle-admin', [AdminController::class, 'toggleAdmin']);
+    Route::post('/users/{id}/set-password', [AdminController::class, 'setPassword']);
     Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
     Route::get('/oauth-clients', [AdminController::class, 'oauthClients']);
     Route::post('/oauth-clients', [AdminController::class, 'createOauthClient']);

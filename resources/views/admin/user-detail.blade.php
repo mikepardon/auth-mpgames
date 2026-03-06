@@ -54,6 +54,30 @@
             </button>
         </form>
         @endif
+
+        {{-- Set Password --}}
+        <div class="mt-5 pt-5 border-t border-slate-800">
+            <h3 class="text-sm font-medium text-slate-400 uppercase mb-3">Set Password</h3>
+            <form method="POST" action="/admin/users/{{ $user->id }}/set-password">
+                @csrf
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">New Password</label>
+                        <input type="password" name="password" required placeholder="Minimum 4 characters"
+                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                        @error('password') <p class="text-red-400 text-xs mt-1">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Confirm Password</label>
+                        <input type="password" name="password_confirmation" required placeholder="Repeat password"
+                            class="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <button type="submit" class="w-full py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition">
+                        Set Password
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- OAuth Tokens -->
