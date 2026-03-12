@@ -62,4 +62,4 @@ Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoo
 Route::get('/auth/google/callback', [SocialAuthController::class, 'handleGoogleCallback']);
 Route::get('/auth/apple/redirect', [SocialAuthController::class, 'redirectToApple']);
 Route::match(['get', 'post'], '/auth/apple/callback', [SocialAuthController::class, 'handleAppleCallback']);
-Route::get('/auth/apple/complete', [SocialAuthController::class, 'completeAppleAuth'])->name('apple.complete');
+Route::get('/auth/apple/complete', [SocialAuthController::class, 'completeAppleAuth']);

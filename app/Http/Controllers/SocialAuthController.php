@@ -7,7 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Crypt;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -96,8 +96,13 @@ class SocialAuthController extends Controller
             $intended = rtrim($intended, '&?');
         }
 
-        $url = URL::temporarySignedRoute('apple.complete', now()->addMinutes(2), [
-            'user' => $user->id,
+        $token = Crypt::encryptString(json_encode([
+            'user_id' => $user->id,
+            'expires' => now()->addMinutes(2)->timestamp,
+        ]));
+
+        $url = url('/auth/apple/complete') . '?' . http_build_query([
+            'token' => $token,
             'redirect' => $intended ?: '',
         ]);
 
@@ -106,11 +111,17 @@ class SocialAuthController extends Controller
 
     public function completeAppleAuth(Request $request): RedirectResponse
     {
-        if (!$request->hasValidSignature()) {
+        try {
+            $payload = json_decode(Crypt::decryptString($request->query('token', '')), true);
+        } catch (\Exception $e) {
             return redirect('/login');
         }
 
-        $user = User::find($request->query('user'));
+        if (!$payload || $payload['expires'] < now()->timestamp) {
+            return redirect('/login');
+        }
+
+        $user = User::find($payload['user_id']);
         if (!$user) {
             return redirect('/login');
         }
