@@ -42,7 +42,7 @@ class SocialAuthController extends Controller
 
     public function handleAppleCallback(Request $request): RedirectResponse
     {
-        $socialUser = Socialite::driver('apple')->user();
+        $socialUser = Socialite::driver('apple')->stateless()->user();
 
         // Restore the intended redirect from cookie since the original session
         // is lost on Apple's cross-site POST (SameSite=Lax blocks session cookies)
