@@ -3,6 +3,13 @@
 
 @section('content')
 <div x-data="{ showChangePassword: false, showDeleteAccount: false }">
+    @if(!empty($returnUrl))
+    <a href="{{ $returnUrl }}"
+        class="flex items-center justify-center w-full py-2 mb-4 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition">
+        &larr; Back to Game
+    </a>
+    @endif
+
     <h2 class="text-xl font-semibold text-center mb-4">Welcome, {{ auth()->user()->username }}</h2>
 
     <div class="space-y-3 text-sm">

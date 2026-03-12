@@ -11,8 +11,13 @@ Route::get('/', function () {
 });
 
 // Dashboard (simple authenticated landing page)
-Route::get('/dashboard', function () {
-    return view('auth.dashboard');
+Route::get('/dashboard', function (\Illuminate\Http\Request $request) {
+    $from = $request->query('from', '');
+    // Only allow https URLs to prevent open redirects
+    if ($from && !str_starts_with($from, 'https://')) {
+        $from = '';
+    }
+    return view('auth.dashboard', ['returnUrl' => $from]);
 })->middleware('auth');
 
 // Auth pages (views)
