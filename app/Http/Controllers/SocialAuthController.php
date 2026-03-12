@@ -7,8 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -31,17 +30,13 @@ class SocialAuthController extends Controller
     {
         $this->storeIntendedUrl();
 
-        // Store the intended redirect in cache keyed by a token, and pass the token
-        // through Apple's OAuth state parameter. Cookies and sessions are lost on
-        // Apple's cross-site POST callback, but the state comes back in the POST body.
-        $intended = session('sso_redirect_after');
-        $token = Str::random(40);
-        if ($intended) {
-            Cache::put('apple_sso:' . $token, $intended, now()->addMinutes(10));
-        }
+        // Encode the intended redirect URL directly in the OAuth state parameter.
+        // Sessions and cookies are lost on Apple's cross-site POST callback,
+        // but the state comes back in the POST body.
+        $intended = session('sso_redirect_after', '');
 
         return Socialite::driver('apple')
-            ->with(['state' => $token])
+            ->with(['state' => base64_encode($intended)])
             ->redirect();
     }
 
@@ -49,14 +44,19 @@ class SocialAuthController extends Controller
     {
         $socialUser = Socialite::driver('apple')->stateless()->user();
 
-        // Restore the intended redirect from cache using the state token
-        // that Apple returned in the POST body
+        // Decode the intended redirect URL from the state parameter
         $state = $request->input('state', '');
-        if ($state) {
-            $intended = Cache::pull('apple_sso:' . $state);
-            if ($intended) {
-                session(['sso_redirect_after' => $intended]);
-            }
+        $intended = $state ? base64_decode($state) : '';
+
+        Log::info('Apple callback', [
+            'state_raw' => $state,
+            'intended' => $intended,
+            'user_id' => $socialUser->getId(),
+            'email' => $socialUser->getEmail(),
+        ]);
+
+        if ($intended && str_starts_with($intended, '/')) {
+            session(['sso_redirect_after' => $intended]);
         }
 
         return $this->handleSocialLogin('apple', 'apple_id', $socialUser);
