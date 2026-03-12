@@ -25,7 +25,10 @@ class AuthController extends Controller
         $parsed = parse_url($intended);
         parse_str($parsed['query'] ?? '', $query);
 
-        if (!empty($query['provider']) && in_array($query['provider'], ['google', 'apple'])) {
+        $ua = $request->userAgent() ?? '';
+        $isWebView = str_contains($ua, 'wtn') || str_contains($ua, 'WebToNative');
+
+        if (!$isWebView && !empty($query['provider']) && in_array($query['provider'], ['google', 'apple'])) {
             return redirect('/auth/' . $query['provider'] . '/redirect');
         }
 
