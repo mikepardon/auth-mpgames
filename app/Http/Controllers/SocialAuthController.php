@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -42,7 +43,28 @@ class SocialAuthController extends Controller
 
     public function handleAppleCallback(Request $request): RedirectResponse
     {
-        $socialUser = Socialite::driver('apple')->stateless()->user();
+        Log::info('Apple callback hit', [
+            'has_code' => $request->has('code'),
+            'has_id_token' => $request->has('id_token'),
+            'has_state' => $request->has('state'),
+            'method' => $request->method(),
+        ]);
+
+        try {
+            $socialUser = Socialite::driver('apple')->stateless()->user();
+
+            Log::info('Apple socialite user resolved', [
+                'id' => $socialUser->getId(),
+                'email' => $socialUser->getEmail(),
+                'name' => $socialUser->getName(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Apple callback failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
 
         // Restore the intended redirect from cookie since the original session
         // is lost on Apple's cross-site POST (SameSite=Lax blocks session cookies)
