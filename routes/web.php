@@ -61,4 +61,4 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
 Route::get('/auth/google/redirect', [SocialAuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [SocialAuthController::class, 'handleGoogleCallback']);
 Route::get('/auth/apple/redirect', [SocialAuthController::class, 'redirectToApple']);
-Route::get('/auth/apple/callback', [SocialAuthController::class, 'handleAppleCallback']);
+Route::match(['get', 'post'], '/auth/apple/callback', [SocialAuthController::class, 'handleAppleCallback']);
