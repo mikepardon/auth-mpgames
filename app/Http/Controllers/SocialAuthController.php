@@ -116,6 +116,11 @@ class SocialAuthController extends Controller
         // Redirect back to the OAuth authorize flow if one was pending
         $redirectAfter = session()->pull('sso_redirect_after');
         if ($redirectAfter) {
+            // Strip the provider hint to prevent redirect loops (e.g. Apple POST
+            // callback loses session, Passport redirects to /login, which sees
+            // provider=apple and sends user back to Apple indefinitely)
+            $redirectAfter = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $redirectAfter);
+            $redirectAfter = rtrim($redirectAfter, '&?');
             return redirect($redirectAfter);
         }
 
