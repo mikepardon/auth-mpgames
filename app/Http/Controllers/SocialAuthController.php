@@ -7,7 +7,6 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -30,22 +29,23 @@ class SocialAuthController extends Controller
     {
         $this->storeIntendedUrl();
 
-        // Encode the intended redirect URL directly in the OAuth state parameter.
+        // Save the intended redirect URL to the database keyed by a token,
+        // and pass that token through Apple's OAuth state parameter.
         // Sessions and cookies are lost on Apple's cross-site POST callback,
         // but the state comes back in the POST body.
         $intended = session('sso_redirect_after', '');
+        $token = bin2hex(random_bytes(20));
 
-        // Use URL-safe base64 to avoid + / = being mangled in the OAuth flow
-        $state = rtrim(strtr(base64_encode($intended), '+/', '-_'), '=');
-
-        Log::info('Apple redirect', [
-            'url_intended' => session('url.intended'),
-            'sso_redirect_after' => $intended,
-            'state' => $state,
-        ]);
+        if ($intended) {
+            \DB::table('cache')->upsert([
+                'key' => 'apple_sso_' . $token,
+                'value' => serialize($intended),
+                'expiration' => time() + 600,
+            ], ['key']);
+        }
 
         return Socialite::driver('apple')
-            ->with(['state' => $state])
+            ->with(['state' => $token])
             ->redirect();
     }
 
@@ -53,22 +53,92 @@ class SocialAuthController extends Controller
     {
         $socialUser = Socialite::driver('apple')->stateless()->user();
 
-        // Decode the intended redirect URL from the state parameter
-        $state = $request->input('state', '');
-        $intended = $state ? base64_decode(strtr($state, '-_', '+/')) : '';
+        // Look up the intended redirect URL from the state token
+        $token = $request->input('state', '');
+        $intended = '';
 
-        Log::info('Apple callback', [
-            'state_raw' => $state,
-            'intended' => $intended,
-            'user_id' => $socialUser->getId(),
-            'email' => $socialUser->getEmail(),
-        ]);
+        if ($token) {
+            $row = \DB::table('cache')
+                ->where('key', 'apple_sso_' . $token)
+                ->where('expiration', '>', time())
+                ->first();
 
-        if ($intended) {
-            session(['sso_redirect_after' => $intended]);
+            if ($row) {
+                $intended = unserialize($row->value);
+                \DB::table('cache')->where('key', 'apple_sso_' . $token)->delete();
+            }
         }
 
-        return $this->handleSocialLogin('apple', 'apple_id', $socialUser);
+        // Handle user creation/login
+        $socialId = $socialUser->getId();
+        $email = $socialUser->getEmail() ? strtolower($socialUser->getEmail()) : null;
+
+        $user = User::where('apple_id', $socialId)->first();
+
+        if (!$user && $email) {
+            $user = User::where('email', $email)->first();
+            if ($user) {
+                $user->update(['apple_id' => $socialId]);
+            }
+        }
+
+        if (!$user) {
+            $username = $this->generateUsername($socialUser->getName() ?? 'appleuser');
+            $user = User::create([
+                'username' => $username,
+                'email' => $email,
+                'apple_id' => $socialId,
+                'avatar_url' => $socialUser->getAvatar(),
+                'email_verified_at' => $email ? now() : null,
+            ]);
+        }
+
+        if ($email && !$user->email_verified_at) {
+            $user->update(['email_verified_at' => now()]);
+        }
+
+        if ($socialUser->getAvatar() && $socialUser->getAvatar() !== $user->avatar_url) {
+            $user->update(['avatar_url' => $socialUser->getAvatar()]);
+        }
+
+        Auth::login($user, true);
+        session()->regenerate();
+
+        AuditLog::create([
+            'user_id' => $user->id,
+            'action' => 'social_login',
+            'metadata' => ['provider' => 'apple'],
+            'ip_address' => request()->ip(),
+            'user_agent' => request()->userAgent(),
+        ]);
+
+        // Redirect via an intermediate GET to ensure the session cookie is
+        // established before hitting Passport's authorize endpoint
+        if ($intended) {
+            $intended = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $intended);
+            $intended = rtrim($intended, '&?');
+            $signature = hash_hmac('sha256', $intended, config('app.key'));
+
+            return redirect('/auth/apple/complete?' . http_build_query([
+                'redirect' => $intended,
+                'sig' => $signature,
+            ]));
+        }
+
+        return redirect('/dashboard');
+    }
+
+    public function completeAppleAuth(Request $request): RedirectResponse
+    {
+        $redirect = $request->query('redirect', '');
+        $sig = $request->query('sig', '');
+
+        // Verify HMAC signature to prevent open redirect
+        if ($redirect && hash_equals(hash_hmac('sha256', $redirect, config('app.key')), $sig)) {
+            return redirect($redirect);
+        }
+
+        return redirect('/dashboard');
     }
 
     private function storeIntendedUrl(): void
@@ -132,9 +202,6 @@ class SocialAuthController extends Controller
         // Redirect back to the OAuth authorize flow if one was pending
         $redirectAfter = session()->pull('sso_redirect_after');
         if ($redirectAfter) {
-            // Strip the provider hint to prevent redirect loops (e.g. Apple POST
-            // callback loses session, Passport redirects to /login, which sees
-            // provider=apple and sends user back to Apple indefinitely)
             $redirectAfter = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $redirectAfter);
             $redirectAfter = rtrim($redirectAfter, '&?');
             return redirect($redirectAfter);
