@@ -7,7 +7,8 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -30,27 +31,33 @@ class SocialAuthController extends Controller
     {
         $this->storeIntendedUrl();
 
-        // Store the intended redirect in a SameSite=None cookie so it survives
-        // Apple's cross-site POST callback (session cookies are blocked by SameSite=Lax)
+        // Store the intended redirect in cache keyed by a token, and pass the token
+        // through Apple's OAuth state parameter. Cookies and sessions are lost on
+        // Apple's cross-site POST callback, but the state comes back in the POST body.
         $intended = session('sso_redirect_after');
+        $token = Str::random(40);
         if ($intended) {
-            Cookie::queue('apple_sso_redirect', $intended, 10, '/', null, true, true, false, 'None');
+            Cache::put('apple_sso:' . $token, $intended, now()->addMinutes(10));
         }
 
-        return Socialite::driver('apple')->redirect();
+        return Socialite::driver('apple')
+            ->with(['state' => $token])
+            ->redirect();
     }
 
     public function handleAppleCallback(Request $request): RedirectResponse
     {
         $socialUser = Socialite::driver('apple')->stateless()->user();
 
-        // Restore the intended redirect from cookie since the original session
-        // is lost on Apple's cross-site POST (SameSite=Lax blocks session cookies)
-        $cookieRedirect = $request->cookie('apple_sso_redirect');
-        if ($cookieRedirect && !session()->has('sso_redirect_after')) {
-            session(['sso_redirect_after' => $cookieRedirect]);
+        // Restore the intended redirect from cache using the state token
+        // that Apple returned in the POST body
+        $state = $request->input('state', '');
+        if ($state) {
+            $intended = Cache::pull('apple_sso:' . $state);
+            if ($intended) {
+                session(['sso_redirect_after' => $intended]);
+            }
         }
-        Cookie::queue(Cookie::forget('apple_sso_redirect'));
 
         return $this->handleSocialLogin('apple', 'apple_id', $socialUser);
     }
