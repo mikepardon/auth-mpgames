@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\URL;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
@@ -29,23 +30,14 @@ class SocialAuthController extends Controller
     {
         $this->storeIntendedUrl();
 
-        // Save the intended redirect URL to the database keyed by a token,
-        // and pass that token through Apple's OAuth state parameter.
+        // Encode the intended redirect URL in the OAuth state parameter.
         // Sessions and cookies are lost on Apple's cross-site POST callback,
         // but the state comes back in the POST body.
         $intended = session('sso_redirect_after', '');
-        $token = bin2hex(random_bytes(20));
-
-        if ($intended) {
-            \DB::table('cache')->upsert([
-                'key' => 'apple_sso_' . $token,
-                'value' => serialize($intended),
-                'expiration' => time() + 600,
-            ], ['key']);
-        }
+        $state = rtrim(strtr(base64_encode($intended), '+/', '-_'), '=');
 
         return Socialite::driver('apple')
-            ->with(['state' => $token])
+            ->with(['state' => $state])
             ->redirect();
     }
 
@@ -53,21 +45,9 @@ class SocialAuthController extends Controller
     {
         $socialUser = Socialite::driver('apple')->stateless()->user();
 
-        // Look up the intended redirect URL from the state token
-        $stateToken = $request->input('state', '');
-        $intended = '';
-
-        if ($stateToken) {
-            $row = \DB::table('cache')
-                ->where('key', 'apple_sso_' . $stateToken)
-                ->where('expiration', '>', time())
-                ->first();
-
-            if ($row) {
-                $intended = unserialize($row->value);
-                \DB::table('cache')->where('key', 'apple_sso_' . $stateToken)->delete();
-            }
-        }
+        // Decode the intended redirect URL from the state
+        $state = $request->input('state', '');
+        $intended = $state ? base64_decode(strtr($state, '-_', '+/')) : '';
 
         // Handle user creation/linking
         $socialId = $socialUser->getId();
@@ -110,43 +90,27 @@ class SocialAuthController extends Controller
         ]);
 
         // DON'T log in here — the session from this cross-site POST won't persist.
-        // Instead, generate a one-time login token and redirect to a GET endpoint
-        // that performs the actual login on a normal same-site request.
-        $loginToken = bin2hex(random_bytes(32));
-        \DB::table('cache')->upsert([
-            'key' => 'apple_login_' . $loginToken,
-            'value' => serialize([
-                'user_id' => $user->id,
-                'redirect' => $intended,
-            ]),
-            'expiration' => time() + 120,
-        ], ['key']);
+        // Instead, redirect to a signed GET URL that performs the login.
+        if ($intended) {
+            $intended = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $intended);
+            $intended = rtrim($intended, '&?');
+        }
 
-        return redirect('/auth/apple/complete?token=' . $loginToken);
+        $url = URL::temporarySignedRoute('apple.complete', now()->addMinutes(2), [
+            'user' => $user->id,
+            'redirect' => $intended ?: '',
+        ]);
+
+        return redirect($url);
     }
 
     public function completeAppleAuth(Request $request): RedirectResponse
     {
-        $loginToken = $request->query('token', '');
-
-        if (!$loginToken) {
+        if (!$request->hasValidSignature()) {
             return redirect('/login');
         }
 
-        $row = \DB::table('cache')
-            ->where('key', 'apple_login_' . $loginToken)
-            ->where('expiration', '>', time())
-            ->first();
-
-        if (!$row) {
-            return redirect('/login');
-        }
-
-        \DB::table('cache')->where('key', 'apple_login_' . $loginToken)->delete();
-
-        $data = unserialize($row->value);
-        $user = User::find($data['user_id']);
-
+        $user = User::find($request->query('user'));
         if (!$user) {
             return redirect('/login');
         }
@@ -155,10 +119,8 @@ class SocialAuthController extends Controller
         Auth::login($user, true);
         session()->regenerate();
 
-        $redirect = $data['redirect'] ?? '';
+        $redirect = $request->query('redirect', '');
         if ($redirect) {
-            $redirect = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $redirect);
-            $redirect = rtrim($redirect, '&?');
             return redirect($redirect);
         }
 
