@@ -35,8 +35,17 @@ class SocialAuthController extends Controller
         // but the state comes back in the POST body.
         $intended = session('sso_redirect_after', '');
 
+        // Use URL-safe base64 to avoid + / = being mangled in the OAuth flow
+        $state = rtrim(strtr(base64_encode($intended), '+/', '-_'), '=');
+
+        Log::info('Apple redirect', [
+            'url_intended' => session('url.intended'),
+            'sso_redirect_after' => $intended,
+            'state' => $state,
+        ]);
+
         return Socialite::driver('apple')
-            ->with(['state' => base64_encode($intended)])
+            ->with(['state' => $state])
             ->redirect();
     }
 
@@ -46,7 +55,7 @@ class SocialAuthController extends Controller
 
         // Decode the intended redirect URL from the state parameter
         $state = $request->input('state', '');
-        $intended = $state ? base64_decode($state) : '';
+        $intended = $state ? base64_decode(strtr($state, '-_', '+/')) : '';
 
         Log::info('Apple callback', [
             'state_raw' => $state,
@@ -55,7 +64,7 @@ class SocialAuthController extends Controller
             'email' => $socialUser->getEmail(),
         ]);
 
-        if ($intended && str_starts_with($intended, '/')) {
+        if ($intended) {
             session(['sso_redirect_after' => $intended]);
         }
 
