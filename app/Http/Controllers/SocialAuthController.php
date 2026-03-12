@@ -54,22 +54,22 @@ class SocialAuthController extends Controller
         $socialUser = Socialite::driver('apple')->stateless()->user();
 
         // Look up the intended redirect URL from the state token
-        $token = $request->input('state', '');
+        $stateToken = $request->input('state', '');
         $intended = '';
 
-        if ($token) {
+        if ($stateToken) {
             $row = \DB::table('cache')
-                ->where('key', 'apple_sso_' . $token)
+                ->where('key', 'apple_sso_' . $stateToken)
                 ->where('expiration', '>', time())
                 ->first();
 
             if ($row) {
                 $intended = unserialize($row->value);
-                \DB::table('cache')->where('key', 'apple_sso_' . $token)->delete();
+                \DB::table('cache')->where('key', 'apple_sso_' . $stateToken)->delete();
             }
         }
 
-        // Handle user creation/login
+        // Handle user creation/linking
         $socialId = $socialUser->getId();
         $email = $socialUser->getEmail() ? strtolower($socialUser->getEmail()) : null;
 
@@ -101,9 +101,6 @@ class SocialAuthController extends Controller
             $user->update(['avatar_url' => $socialUser->getAvatar()]);
         }
 
-        Auth::login($user, true);
-        session()->regenerate();
-
         AuditLog::create([
             'user_id' => $user->id,
             'action' => 'social_login',
@@ -112,29 +109,56 @@ class SocialAuthController extends Controller
             'user_agent' => request()->userAgent(),
         ]);
 
-        // Redirect via an intermediate GET to ensure the session cookie is
-        // established before hitting Passport's authorize endpoint
-        if ($intended) {
-            $intended = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $intended);
-            $intended = rtrim($intended, '&?');
-            $signature = hash_hmac('sha256', $intended, config('app.key'));
-
-            return redirect('/auth/apple/complete?' . http_build_query([
+        // DON'T log in here — the session from this cross-site POST won't persist.
+        // Instead, generate a one-time login token and redirect to a GET endpoint
+        // that performs the actual login on a normal same-site request.
+        $loginToken = bin2hex(random_bytes(32));
+        \DB::table('cache')->upsert([
+            'key' => 'apple_login_' . $loginToken,
+            'value' => serialize([
+                'user_id' => $user->id,
                 'redirect' => $intended,
-                'sig' => $signature,
-            ]));
-        }
+            ]),
+            'expiration' => time() + 120,
+        ], ['key']);
 
-        return redirect('/dashboard');
+        return redirect('/auth/apple/complete?token=' . $loginToken);
     }
 
     public function completeAppleAuth(Request $request): RedirectResponse
     {
-        $redirect = $request->query('redirect', '');
-        $sig = $request->query('sig', '');
+        $loginToken = $request->query('token', '');
 
-        // Verify HMAC signature to prevent open redirect
-        if ($redirect && hash_equals(hash_hmac('sha256', $redirect, config('app.key')), $sig)) {
+        if (!$loginToken) {
+            return redirect('/login');
+        }
+
+        $row = \DB::table('cache')
+            ->where('key', 'apple_login_' . $loginToken)
+            ->where('expiration', '>', time())
+            ->first();
+
+        if (!$row) {
+            return redirect('/login');
+        }
+
+        \DB::table('cache')->where('key', 'apple_login_' . $loginToken)->delete();
+
+        $data = unserialize($row->value);
+        $user = User::find($data['user_id']);
+
+        if (!$user) {
+            return redirect('/login');
+        }
+
+        // Log in on this normal GET request — session will persist
+        Auth::login($user, true);
+        session()->regenerate();
+
+        $redirect = $data['redirect'] ?? '';
+        if ($redirect) {
+            $redirect = preg_replace('/([&?])provider=[^&]+(&?)/', '$1', $redirect);
+            $redirect = rtrim($redirect, '&?');
             return redirect($redirect);
         }
 
