@@ -12,8 +12,8 @@ class OneSignalService
 
     public function __construct()
     {
-        $this->appId = config('services.onesignal.app_id');
-        $this->restApiKey = config('services.onesignal.rest_api_key');
+        $this->appId = config('services.onesignal.app_id') ?? '';
+        $this->restApiKey = config('services.onesignal.rest_api_key') ?? '';
     }
 
     public function ensureEmailSubscription(string $email): void
