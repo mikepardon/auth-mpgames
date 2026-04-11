@@ -4,9 +4,13 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: auth-mpgames-app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.auth-mpgames-app.rule=Host(`auth.mpgames.io`)
+    networks:
+      - default
+      - traefik
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8082:80"
     env_file: .env.production
     volumes:
       - app-storage:/var/www/html/storage/app
@@ -31,6 +35,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:0:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-auth_mpgames}"]
       interval: 10s
@@ -41,3 +47,7 @@ volumes:
   postgres-data:
   app-storage:
   app-logs:
+
+networks:
+  traefik:
+    external: true
