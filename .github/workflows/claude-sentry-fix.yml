@@ -1,0 +1,84 @@
+name: Claude fix from Sentry
+
+# Copy this file to .github/workflows/claude-sentry-fix.yml in the repo you
+# pointed GITHUB_REPO at. It is triggered by the relay's repository_dispatch.
+
+on:
+  repository_dispatch:
+    types: [sentry-error]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Notify Discord that the deep pass started
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          THREAD_ID: ${{ github.event.client_payload.discord_thread_id }}
+        run: |
+          curl -sS -X POST "https://discord.com/api/v10/channels/$THREAD_ID/messages" \
+            -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"content":"🔧 Claude Code is now reading the repo and attempting a fix..."}'
+
+      - name: Claude fix
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Keep runs bounded — this is billed per token and per Actions minute.
+          claude_args: "--max-turns 25 --allowedTools Bash,Edit,Read,Write,Glob,Grep"
+          # Sentry's hosted MCP server lets Claude pull breadcrumbs, related
+          # issues and regression history itself instead of relying on the prompt.
+          mcp_config: |
+            {
+              "mcpServers": {
+                "sentry": {
+                  "type": "http",
+                  "url": "https://mcp.sentry.dev/mcp"
+                }
+              }
+            }
+          prompt: |
+            A production error was reported by Sentry.
+
+            Title: ${{ github.event.client_payload.title }}
+            Platform: ${{ github.event.client_payload.platform }}
+            Culprit: ${{ github.event.client_payload.culprit }}
+            Sentry issue: ${{ github.event.client_payload.sentry_url }}
+            Sentry issue id: ${{ github.event.client_payload.sentry_issue_id }}
+
+            First-pass triage (from the stack trace only, may be wrong):
+            ${{ toJSON(github.event.client_payload.triage) }}
+
+            Stack:
+            ${{ github.event.client_payload.stack }}
+
+            Do this:
+            1. Open the files at the failing frames and confirm or correct the diagnosis.
+            2. If it is NOT a code bug in this repo, stop and say so — do not open a PR.
+            3. Otherwise make the smallest correct fix, plus a regression test if the repo has tests.
+            4. Create a branch named sentry-${{ github.event.client_payload.sentry_issue_id }}
+               and open a DRAFT pull request. Never merge.
+            5. The PR body MUST include this exact line so the relay can match it:
+               sentry-issue: ${{ github.event.client_payload.sentry_issue_id }}
+
+      - name: Report failure to Discord
+        if: failure()
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          THREAD_ID: ${{ github.event.client_payload.discord_thread_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sS -X POST "https://discord.com/api/v10/channels/$THREAD_ID/messages" \
+            -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\":\"⚠️ The automated fix run failed. Needs a human: $RUN_URL\"}"
