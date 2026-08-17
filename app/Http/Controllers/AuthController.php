@@ -5,14 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\EmailVerificationCode;
 use App\Models\User;
-use App\Services\OneSignalService;
 use App\Services\WebhookService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -274,9 +275,9 @@ class AuthController extends Controller
             . '<p style="text-align: center; font-size: 0.85rem; color: #94a3b8;">This link expires in 60 minutes.</p>'
             . '</div>';
 
-        $oneSignal = app(OneSignalService::class);
-        $oneSignal->ensureEmailSubscription($user->email);
-        $oneSignal->sendEmail($user->email, 'MPGames - Reset Your Password', $html);
+        Mail::html($html, function (Message $message) use ($user): void {
+            $message->to($user->email)->subject('MPGames - Reset Your Password');
+        });
 
         return response()->json(['message' => 'If that email exists, a reset link has been sent.']);
     }
@@ -375,8 +376,8 @@ class AuthController extends Controller
             . '<p style="text-align: center; font-size: 0.85rem; color: #94a3b8;">This code expires in 15 minutes.</p>'
             . '</div>';
 
-        $oneSignal = app(OneSignalService::class);
-        $oneSignal->ensureEmailSubscription($user->email);
-        $oneSignal->sendEmail($user->email, 'MPGames - Verify Your Email', $html);
+        Mail::html($html, function (Message $message) use ($user): void {
+            $message->to($user->email)->subject('MPGames - Verify Your Email');
+        });
     }
 }

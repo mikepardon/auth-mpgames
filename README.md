@@ -41,8 +41,11 @@ php artisan serve
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `APPLE_CLIENT_ID` | Apple Sign In service ID |
 | `APPLE_CLIENT_SECRET` | Apple Sign In client secret |
-| `ONESIGNAL_APP_ID` | OneSignal app ID for email delivery |
-| `ONESIGNAL_REST_API_KEY` | OneSignal REST API key |
+| `MAIL_MAILER` | Mail transport (`ses` in production) |
+| `AWS_ACCESS_KEY_ID` | IAM key for SES email delivery |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret for SES email delivery |
+| `AWS_DEFAULT_REGION` | SES region (e.g. `eu-north-1`) |
+| `MAIL_FROM_ADDRESS` | Verified SES sender address |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins for game clients |
 
 ### Google SSO Setup
@@ -266,4 +269,4 @@ Game Client (TA)              Auth Service (auth.mpgames.com)
 - **Blade + Alpine.js**: Auth UI is ~6 pages. No build step needed.
 - **Nullable password**: SSO-only users never set a password.
 - **Identity only**: Auth service stores identity (username, email, SSO IDs). Game data (XP, stats) stays in each game's DB linked by `auth_id`.
-- **OneSignal for email**: Matches existing Trusted Advisors infrastructure.
+- **Amazon SES for email**: Transactional email (verification codes, password resets) is sent via Laravel's `Mail` facade using the SES mailer.
